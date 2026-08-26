@@ -1,0 +1,114 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "gateflow-overview",
+    "title": "GateFlow Overview",
+    "tags": ["gateflow"],
+    "timezone": "utc",
+    "schemaVersion": 36,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Request Rate",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(gateflow_request_count_total[1m]))",
+            "legendFormat": "req/s"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 0, "y": 0 }
+      },
+      {
+        "id": 2,
+        "title": "5xx Rate",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(gateflow_request_count_total{status_code=~\"5..\"}[1m]))",
+            "legendFormat": "5xx/s"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 6, "y": 0 }
+      },
+      {
+        "id": 3,
+        "title": "Rate Limited Rate",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(gateflow_rate_limited_total[1m]))",
+            "legendFormat": "429/s"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 }
+      },
+      {
+        "id": 4,
+        "title": "Circuit Open Events",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(gateflow_circuit_opened_total[1m]))",
+            "legendFormat": "open/s"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 }
+      },
+      {
+        "id": 5,
+        "title": "p95 Gateway Latency",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(gateflow_request_latency_seconds_bucket[1m])) by (le))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(gateflow_request_latency_seconds_bucket[1m])) by (le))",
+            "legendFormat": "p99"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+      },
+      {
+        "id": 6,
+        "title": "p95 Overhead Latency",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(gateflow_overhead_latency_seconds_bucket[1m])) by (le))",
+            "legendFormat": "p95"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+      },
+      {
+        "id": 7,
+        "title": "Error Budget (5xx > 1%)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(gateflow_request_count_total{status_code=~\"5..\"}[5m])) / sum(rate(gateflow_request_count_total[5m]))",
+            "legendFormat": "5xx ratio"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+      },
+      {
+        "id": 8,
+        "title": "Top Rate-Limited Routes",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "topk(10, sum by (route) (rate(gateflow_rate_limited_total[5m])))",
+            "format": "table"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
+      }
+    ]
+  },
+  "overwrite": true
+}

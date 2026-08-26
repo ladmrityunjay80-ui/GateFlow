@@ -1,0 +1,45 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: gateflow-slo-rules
+  namespace: monitoring
+  labels:
+    app: gateflow
+spec:
+  groups:
+    - name: gateflow-availability
+      rules:
+        - alert: GateFlowHighErrorRate
+          expr: |
+            sum(rate(gateflow_request_count_total{status_code=~"5.."}[5m]))
+            /
+            sum(rate(gateflow_request_count_total[5m])) > 0.01
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "GateFlow error rate is above 1%"
+            description: "The 5xx error rate for GateFlow is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+        - alert: GateFlowHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(gateflow_request_latency_seconds_bucket[5m])) by (le, route)
+            ) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "GateFlow p95 latency is high"
+            description: "p95 latency for route {{ $labels.route }} is {{ $value }}s."
+
+    - name: gateflow-saturation
+      rules:
+        - alert: GateFlowRateLimited
+          expr: sum(rate(gateflow_rate_limited_total[5m])) > 10
+          for: 1m
+          labels:
+            severity: info
+          annotations:
+            summary: "GateFlow is rate limiting many requests"
+            description: "Rate limit events are {{ $value }} per second."

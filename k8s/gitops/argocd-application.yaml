@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gateflow
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/example/gateflow.git
+    targetRevision: main
+    path: helm/gateflow
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gateflow
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

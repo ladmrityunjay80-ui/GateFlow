@@ -1,0 +1,87 @@
+# Production overrides for GateFlow Helm chart.
+# This file assumes an external HA Redis, cert-manager, and an external-secrets operator.
+replicaCount: 3
+
+image:
+  repository: ghcr.io/example/gateflow
+  pullPolicy: IfNotPresent
+  tag: "1.0.0"
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 70
+
+pdb:
+  enabled: true
+  minAvailable: 2
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "200"
+    nginx.ingress.kubernetes.io/enable-modsecurity: "true"
+    nginx.ingress.kubernetes.io/enable-owasp-core-rules: "true"
+  hosts:
+    - api.gateflow.example.com
+  tls:
+    - secretName: gateflow-tls
+      hosts:
+        - api.gateflow.example.com
+
+# External secrets are managed by External Secrets Operator or Vault Agent.
+# Do not place plaintext secrets in this file.
+externalSecrets:
+  enabled: true
+  secretStoreRef:
+    name: vault-backend
+    kind: SecretStore
+  refreshInterval: 1h
+  references:
+    adminKey: gateflow/admin-key
+    keySecret: gateflow/key-secret
+    webhookSigningSecret: gateflow/webhook-signing-secret
+    redisPassword: gateflow/redis-password
+
+config:
+  app_name: GateFlow
+  debug: "false"
+  forwarded_allow_ips: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+  cors_origins: ""
+  admin_key: ""  # sourced from external secret
+  admin_read_keys: ""
+  admin_rate_limit_enabled: "true"
+  admin_rate_limit_capacity: "30"
+  admin_rate_limit_refill_rate: "1.0"
+  key_secret: ""  # sourced from external secret
+  key_secret_versions: ""
+  redis_url: "redis://gateflow-redis.gateflow.svc.cluster.local:6379/0"
+  redis_sentinels: ""  # set this or redis_url, not both
+  redis_service_name: "mymaster"
+  redis_health_check_interval: "30"
+  notification_worker_enabled: "true"
+  notification_webhook_url: ""
+  webhook_signing_secret: ""  # sourced from external secret
+  global_rate_limit_enabled: "true"
+  global_rate_limit_capacity: "100000"
+  global_rate_limit_refill_rate: "10000.0"

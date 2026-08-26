@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gateflow
+  namespace: monitoring
+  labels:
+    app: gateflow
+spec:
+  selector:
+    matchLabels:
+      app: gateflow
+  namespaceSelector:
+    matchNames:
+      - gateflow
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      honorLabels: true

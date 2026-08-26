@@ -1,0 +1,169 @@
+version: "3.9"
+
+services:
+  redis-master:
+    image: bitnami/redis:7.0
+    container_name: gateflow_redis_master
+    hostname: redis-master
+    environment:
+      - REDIS_REPLICATION_MODE=master
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_AOF_ENABLED=yes
+      - REDIS_EXTRA_FLAGS=--maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_master_data:/bitnami/redis/data
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-replica:
+    image: bitnami/redis:7.0
+    container_name: gateflow_redis_replica
+    hostname: redis-replica
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    environment:
+      - REDIS_REPLICATION_MODE=slave
+      - REDIS_MASTER_HOST=redis-master
+      - REDIS_MASTER_PORT_NUMBER=6379
+      - ALLOW_EMPTY_PASSWORD=yes
+    volumes:
+      - redis_replica_data:/bitnami/redis/data
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-sentinel-1:
+    image: bitnami/redis-sentinel:7.0
+    container_name: gateflow_redis_sentinel_1
+    hostname: redis-sentinel-1
+    depends_on:
+      - redis-master
+      - redis-replica
+    environment:
+      - REDIS_MASTER_HOST=redis-master
+      - REDIS_MASTER_PORT_NUMBER=6379
+      - REDIS_SENTINEL_QUORUM=2
+      - REDIS_SENTINEL_DOWN_AFTER_MILLISECONDS=5000
+      - REDIS_SENTINEL_FAILOVER_TIMEOUT=10000
+      - REDIS_SENTINEL_ANNOUNCE_IP=redis-sentinel-1
+    expose:
+      - "26379"
+
+  redis-sentinel-2:
+    image: bitnami/redis-sentinel:7.0
+    container_name: gateflow_redis_sentinel_2
+    hostname: redis-sentinel-2
+    depends_on:
+      - redis-master
+      - redis-replica
+    environment:
+      - REDIS_MASTER_HOST=redis-master
+      - REDIS_MASTER_PORT_NUMBER=6379
+      - REDIS_SENTINEL_QUORUM=2
+      - REDIS_SENTINEL_DOWN_AFTER_MILLISECONDS=5000
+      - REDIS_SENTINEL_FAILOVER_TIMEOUT=10000
+      - REDIS_SENTINEL_ANNOUNCE_IP=redis-sentinel-2
+    expose:
+      - "26379"
+
+  redis-sentinel-3:
+    image: bitnami/redis-sentinel:7.0
+    container_name: gateflow_redis_sentinel_3
+    hostname: redis-sentinel-3
+    depends_on:
+      - redis-master
+      - redis-replica
+    environment:
+      - REDIS_MASTER_HOST=redis-master
+      - REDIS_MASTER_PORT_NUMBER=6379
+      - REDIS_SENTINEL_QUORUM=2
+      - REDIS_SENTINEL_DOWN_AFTER_MILLISECONDS=5000
+      - REDIS_SENTINEL_FAILOVER_TIMEOUT=10000
+      - REDIS_SENTINEL_ANNOUNCE_IP=redis-sentinel-3
+    expose:
+      - "26379"
+
+  users-service:
+    build:
+      context: ./services/users
+    container_name: gateflow_users_service
+    expose:
+      - "8000"
+    environment:
+      - SERVICE_NAME=users
+
+  orders-service:
+    build:
+      context: ./services/orders
+    container_name: gateflow_orders_service
+    expose:
+      - "8000"
+    environment:
+      - SERVICE_NAME=orders
+
+  gateflow_proxy_alpha:
+    build:
+      context: .
+    container_name: gateflow_proxy_alpha
+    hostname: gateflow_proxy_alpha
+    expose:
+      - "8000"
+    environment:
+      - GATEFLOW_ADMIN_KEY=${GATEFLOW_ADMIN_KEY:-gateflow-admin-dev}
+      - GATEFLOW_REDIS_SENTINELS=redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379
+      - GATEFLOW_REDIS_SERVICE_NAME=mymaster
+      - GATEWAY_HOST=0.0.0.0
+      - GATEWAY_PORT=8000
+      - GATEFLOW_REDIS_HEALTH_CHECK_INTERVAL=10
+    depends_on:
+      - redis-sentinel-1
+      - redis-sentinel-2
+      - redis-sentinel-3
+      - users-service
+      - orders-service
+
+  gateflow_proxy_beta:
+    build:
+      context: .
+    container_name: gateflow_proxy_beta
+    hostname: gateflow_proxy_beta
+    expose:
+      - "8000"
+    environment:
+      - GATEFLOW_ADMIN_KEY=${GATEFLOW_ADMIN_KEY:-gateflow-admin-dev}
+      - GATEFLOW_REDIS_SENTINELS=redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379
+      - GATEFLOW_REDIS_SERVICE_NAME=mymaster
+      - GATEWAY_HOST=0.0.0.0
+      - GATEWAY_PORT=8000
+      - GATEFLOW_REDIS_HEALTH_CHECK_INTERVAL=10
+    depends_on:
+      - redis-sentinel-1
+      - redis-sentinel-2
+      - redis-sentinel-3
+      - users-service
+      - orders-service
+
+  nginx:
+    image: nginx:alpine
+    container_name: gateflow_nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - gateflow_proxy_alpha
+      - gateflow_proxy_beta
+
+volumes:
+  redis_master_data:
+  redis_replica_data:

@@ -1,0 +1,49 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateflow-network-policy
+  namespace: gateflow
+spec:
+  podSelector:
+    matchLabels:
+      app: gateflow
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: gateflow
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Downstream services must carry the `gateflow.io/downstream: "true"`
+    # label in the same namespace. Remove or adjust this rule if downstreams
+    # live in a different namespace.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: gateflow
+        podSelector:
+          matchLabels:
+            gateflow.io/downstream: "true"
+    # DNS is required for service discovery.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

@@ -1,0 +1,195 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateflow
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-sentinel
+  namespace: gateflow
+data:
+  redis-start.sh: |
+    #!/bin/sh
+    set -e
+    INDEX="${HOSTNAME##*-}"
+    SVC="redis-sentinel"
+    NS="gateflow"
+    export SVC NS
+    MASTER="redis-sentinel-0.${SVC}.${NS}.svc.cluster.local"
+    if [ "$INDEX" = "0" ]; then
+      exec redis-server \
+        --appendonly yes \
+        --appendfsync everysec \
+        --save 900 1 300 10 60 10000 \
+        --bind 0.0.0.0 \
+        --port 6379 \
+        --dir /data \
+        --maxmemory 256mb \
+        --maxmemory-policy allkeys-lru
+    else
+      exec redis-server \
+        --appendonly yes \
+        --appendfsync everysec \
+        --save 900 1 300 10 60 10000 \
+        --bind 0.0.0.0 \
+        --port 6379 \
+        --dir /data \
+        --maxmemory 256mb \
+        --maxmemory-policy allkeys-lru \
+        --replicaof "$MASTER" 6379
+    fi
+  sentinel-start.sh: |
+    #!/bin/sh
+    set -e
+    FQDN="${HOSTNAME}.${SVC}.${NS}.svc.cluster.local"
+    MASTER="redis-sentinel-0.${SVC}.${NS}.svc.cluster.local"
+    cat > /etc/sentinel.conf <<EOF
+    port 26379
+    sentinel announce-ip ${FQDN}
+    sentinel announce-port 26379
+    sentinel monitor mymaster ${MASTER} 6379 2
+    sentinel down-after-milliseconds mymaster 5000
+    sentinel failover-timeout mymaster 10000
+    sentinel parallel-syncs mymaster 1
+    EOF
+    exec redis-server /etc/sentinel.conf --sentinel
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sentinel
+  namespace: gateflow
+  labels:
+    app: redis-sentinel
+spec:
+  clusterIP: None
+  selector:
+    app: redis-sentinel
+  ports:
+    - port: 6379
+      name: redis
+    - port: 26379
+      name: sentinel
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-sentinel
+  namespace: gateflow
+  labels:
+    app: redis-sentinel
+spec:
+  serviceName: redis-sentinel
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: redis-sentinel
+  template:
+    metadata:
+      labels:
+        app: redis-sentinel
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          command:
+            - /etc/redis/redis-start.sh
+          ports:
+            - containerPort: 6379
+              name: redis
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+            - name: redis-sentinel-config
+              mountPath: /etc/redis
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+        - name: sentinel
+          image: redis:7-alpine
+          command:
+            - /etc/redis/sentinel-start.sh
+          env:
+            - name: SVC
+              value: "redis-sentinel"
+            - name: NS
+              value: "gateflow"
+          ports:
+            - containerPort: 26379
+              name: sentinel
+          volumeMounts:
+            - name: redis-sentinel-config
+              mountPath: /etc/redis
+            - name: sentinel-tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          livenessProbe:
+            tcpSocket:
+              port: 26379
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -p
+                - "26379"
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: redis-sentinel-config
+          configMap:
+            name: redis-sentinel
+            defaultMode: 0755
+        - name: sentinel-tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 2Gi

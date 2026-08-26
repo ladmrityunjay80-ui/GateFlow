@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GateFlow Developer Portal</title>
+  <link rel="stylesheet" href="/static/portal/styles.css">
+</head>
+<body>
+  <header>
+    <h1>GateFlow Developer Portal</h1>
+  </header>
+  <main>
+    <section id="auth">
+      <label for="api-key">API Key</label>
+      <input id="api-key" type="text" placeholder="Enter your API key" />
+      <button id="load-btn">Load</button>
+    </section>
+
+    <section id="quota-card" class="card hidden">
+      <h2>Quota & Usage</h2>
+      <dl id="quota-dl"></dl>
+    </section>
+
+    <section id="actions-card" class="card hidden">
+      <h2>Actions</h2>
+      <button id="rotate-btn">Rotate API Key</button>
+      <form id="tier-form">
+        <label for="tier">Request tier change</label>
+        <input id="tier" type="text" placeholder="pro, enterprise, ..." required />
+        <textarea id="reason" placeholder="Reason"></textarea>
+        <button type="submit">Request Tier</button>
+      </form>
+      <p id="result"></p>
+    </section>
+  </main>
+  <script src="/static/portal/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: gateflow_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --appendfsync everysec --save 900 1 300 10 60 10000
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  users-service:
+    build:
+      context: ./services/users
+    container_name: gateflow_users_service
+    expose:
+      - "8000"
+    environment:
+      - SERVICE_NAME=users
+
+  orders-service:
+    build:
+      context: ./services/orders
+    container_name: gateflow_orders_service
+    expose:
+      - "8000"
+    environment:
+      - SERVICE_NAME=orders
+
+  gateflow_proxy_alpha:
+    build:
+      context: .
+    container_name: gateflow_proxy_alpha
+    hostname: gateflow_proxy_alpha
+    expose:
+      - "8000"
+    environment:
+      - GATEFLOW_ADMIN_KEY=${GATEFLOW_ADMIN_KEY:-gateflow-admin-dev}
+      - GATEFLOW_REDIS_URL=redis://redis:6379/0
+      - GATEWAY_HOST=0.0.0.0
+      - GATEWAY_PORT=8000
+    depends_on:
+      redis:
+        condition: service_healthy
+      users-service:
+        condition: service_started
+      orders-service:
+        condition: service_started
+
+  gateflow_proxy_beta:
+    build:
+      context: .
+    container_name: gateflow_proxy_beta
+    hostname: gateflow_proxy_beta
+    expose:
+      - "8000"
+    environment:
+      - GATEFLOW_ADMIN_KEY=${GATEFLOW_ADMIN_KEY:-gateflow-admin-dev}
+      - GATEFLOW_REDIS_URL=redis://redis:6379/0
+      - GATEWAY_HOST=0.0.0.0
+      - GATEWAY_PORT=8000
+    depends_on:
+      redis:
+        condition: service_healthy
+      users-service:
+        condition: service_started
+      orders-service:
+        condition: service_started
+
+  nginx:
+    image: nginx:alpine
+    container_name: gateflow_nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - gateflow_proxy_alpha
+      - gateflow_proxy_beta

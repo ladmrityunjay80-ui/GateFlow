@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "gateflow.fullname" . }}
+  labels:
+    {{- include "gateflow.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "gateflow.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      honorLabels: true

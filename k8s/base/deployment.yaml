@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateflow
+  namespace: gateflow
+  labels:
+    app: gateflow
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: gateflow
+  template:
+    metadata:
+      labels:
+        app: gateflow
+    spec:
+      serviceAccountName: default
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      initContainers:
+        - name: validate-admin-key
+          image: busybox:1.36
+          envFrom:
+            - secretRef:
+                name: gateflow-secrets
+          command:
+            - sh
+            - -c
+            - |
+              if [ -z "$GATEFLOW_ADMIN_KEY" ] || [ "$GATEFLOW_ADMIN_KEY" = "gateflow-admin-dev" ] || [ "$GATEFLOW_ADMIN_KEY" = "gateflow-admin-change-me" ]; then
+                echo "Refusing to start with a default or empty admin key. Set GATEFLOW_ADMIN_KEY in k8s/base/secret.yaml."
+                exit 1
+              fi
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - gateflow
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: gateflow
+          image: gateflow:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: gateflow-config
+            - secretRef:
+                name: gateflow-secrets
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL

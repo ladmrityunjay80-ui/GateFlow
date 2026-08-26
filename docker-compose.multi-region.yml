@@ -1,0 +1,57 @@
+# Multi-region reference topology for GateFlow
+#
+# This is a starting point for a dual-zone / active-active deployment with
+# cross-region Redis replication.  Run one stack per region and place instances
+# behind regional load balancers.  Use Redis Streams (not RDB replication) as
+# the source of truth for telemetry and audit, or adopt a managed Redis Global
+# Datastore (ElastiCache Global, Redis Cloud Active-Active, etc.) in production.
+version: "3.8"
+
+services:
+  redis-region:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --requirepass ${GATEFLOW_REDIS_PASSWORD:-}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - gateflow-region
+
+  redis-replica:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --replicaof redis-region 6379
+      --masterauth ${GATEFLOW_REDIS_PASSWORD:-}
+      --requirepass ${GATEFLOW_REDIS_PASSWORD:-}
+    depends_on:
+      - redis-region
+    networks:
+      - gateflow-region
+
+  gateflow:
+    build: .
+    environment:
+      - GATEWAY_HOST=0.0.0.0
+      - GATEWAY_PORT=8000
+      - GATEFLOW_REDIS_URL=redis://redis-region:6379/0
+      - GATEFLOW_REDIS_PASSWORD=${GATEFLOW_REDIS_PASSWORD:-}
+    depends_on:
+      - redis-region
+    ports:
+      - "8080:8000"
+    networks:
+      - gateflow-region
+
+volumes:
+  redis-data:
+
+networks:
+  gateflow-region:
+    driver: bridge

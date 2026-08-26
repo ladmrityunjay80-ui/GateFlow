@@ -1,0 +1,122 @@
+version: "3.9"
+
+services:
+  redis-master:
+    image: redis:7-alpine
+    container_name: gateflow_redis_master
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --save
+      - 900
+      - 1
+      - 300
+      - 10
+      - 60
+      - 10000
+    volumes:
+      - redis-master-data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-replica-1:
+    image: redis:7-alpine
+    container_name: gateflow_redis_replica_1
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --save
+      - 900
+      - 1
+      - 300
+      - 10
+      - 60
+      - 10000
+      - --replicaof
+      - redis-master
+      - "6379"
+    depends_on:
+      redis-master:
+        condition: service_healthy
+
+  redis-replica-2:
+    image: redis:7-alpine
+    container_name: gateflow_redis_replica_2
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --save
+      - 900
+      - 1
+      - 300
+      - 10
+      - 60
+      - 10000
+      - --replicaof
+      - redis-master
+      - "6379"
+    depends_on:
+      redis-master:
+        condition: service_healthy
+
+  sentinel-1:
+    image: redis:7-alpine
+    container_name: gateflow_sentinel_1
+    environment:
+      SENTINEL_NAME: sentinel-1
+    volumes:
+      - ./docker/redis-sentinel/sentinel-entrypoint.sh:/usr/local/bin/sentinel-entrypoint.sh:ro
+    command: ["/usr/local/bin/sentinel-entrypoint.sh"]
+    depends_on:
+      - redis-master
+      - redis-replica-1
+      - redis-replica-2
+    ports:
+      - "26379:26379"
+
+  sentinel-2:
+    image: redis:7-alpine
+    container_name: gateflow_sentinel_2
+    environment:
+      SENTINEL_NAME: sentinel-2
+    volumes:
+      - ./docker/redis-sentinel/sentinel-entrypoint.sh:/usr/local/bin/sentinel-entrypoint.sh:ro
+    command: ["/usr/local/bin/sentinel-entrypoint.sh"]
+    depends_on:
+      - redis-master
+      - redis-replica-1
+      - redis-replica-2
+    ports:
+      - "26380:26379"
+
+  sentinel-3:
+    image: redis:7-alpine
+    container_name: gateflow_sentinel_3
+    environment:
+      SENTINEL_NAME: sentinel-3
+    volumes:
+      - ./docker/redis-sentinel/sentinel-entrypoint.sh:/usr/local/bin/sentinel-entrypoint.sh:ro
+    command: ["/usr/local/bin/sentinel-entrypoint.sh"]
+    depends_on:
+      - redis-master
+      - redis-replica-1
+      - redis-replica-2
+    ports:
+      - "26381:26379"
+
+volumes:
+  redis-master-data:

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GateFlow Developer Portal</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { color: #1a202c; }
+    label { display: block; margin: 1rem 0 0.25rem; }
+    input, button { padding: 0.5rem; font-size: 1rem; }
+    input { width: 100%; box-sizing: border-box; }
+    button { margin-top: 1rem; cursor: pointer; }
+    pre { background: #f7fafc; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+    .error { color: #c53030; }
+    .ok { color: #276749; }
+  </style>
+</head>
+<body>
+  <h1>GateFlow Developer Portal</h1>
+  <p>View your API key quota and usage information.</p>
+
+  <label for="api-key">X-API-KEY</label>
+  <input id="api-key" type="text" placeholder="your-api-key" value="">
+
+  <button id="lookup">Look up quota</button>
+  <button id="rotate">Rotate key</button>
+
+  <h2>Tier request</h2>
+  <label for="requested-tier">Requested tier</label>
+  <input id="requested-tier" type="text" placeholder="premium">
+  <label for="reason">Reason</label>
+  <input id="reason" type="text" placeholder="Business growth">
+  <button id="request-tier">Request tier</button>
+
+  <p><a href="/api/me/openapi" target="_blank">OpenAPI UI</a></p>
+
+  <h2>Result</h2>
+  <pre id="result">Enter an API key and click a button.</pre>
+
+  <script>
+    async function call(path, options = {}) {
+      const key = document.getElementById('api-key').value.trim();
+      const result = document.getElementById('result');
+      if (!key) {
+        result.textContent = 'Please enter an API key.';
+        result.className = 'error';
+        return;
+      }
+      try {
+        const response = await fetch(path, {
+          ...options,
+          headers: { 'X-API-KEY': key, ...(options.headers || {}) },
+        });
+        const data = await response.json();
+        result.textContent = JSON.stringify(data, null, 2);
+        result.className = response.ok ? 'ok' : 'error';
+      } catch (err) {
+        result.textContent = 'Error: ' + err.message;
+        result.className = 'error';
+      }
+    }
+
+    document.getElementById('lookup').addEventListener('click', () => call('/api/me/quota'));
+    document.getElementById('rotate').addEventListener('click', () => call('/api/me/keys/rotate', { method: 'POST' }));
+    document.getElementById('request-tier').addEventListener('click', () => {
+      const tier = document.getElementById('requested-tier').value.trim();
+      const reason = document.getElementById('reason').value.trim();
+      const params = new URLSearchParams({ requested_tier: tier, reason });
+      call('/api/me/tier/request?' + params.toString(), { method: 'POST' });
+    });
+  </script>
+</body>
+</html>

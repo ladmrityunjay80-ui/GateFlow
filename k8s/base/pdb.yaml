@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gateflow
+  namespace: gateflow
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: gateflow

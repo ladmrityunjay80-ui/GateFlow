@@ -1,0 +1,13 @@
+{{- if .Values.pdb.enabled -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "gateflow.fullname" . }}
+  labels:
+    {{- include "gateflow.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "gateflow.selectorLabels" . | nindent 6 }}
+{{- end -}}
